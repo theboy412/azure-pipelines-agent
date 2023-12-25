@@ -94,14 +94,15 @@ Can be overriden by setting ".Values.securityContext".
 See: https://kubernetes.io/docs/concepts/windows/intro/#compatibility-v1-pod-spec-containers
 */}}
 {{- define "azure-pipelines-agent.defaultSecurityContext" -}}
-runAsNonRoot: false
+runAsNonRoot: true
 readOnlyRootFilesystem: false
 {{- if .Values.image.isWindows }}
 windowsOptions:
   runAsUserName: ContainerAdministrator
 {{- else }}
 allowPrivilegeEscalation: false
-runAsUser: 0
+# Standard user for Red Hat OpenShift
+runAsUser: 1000920000
 capabilities:
   drop: ["ALL"]
 {{- end }}
@@ -183,10 +184,6 @@ containers:
         {{- end }}
       - name: VSO_AGENT_IGNORE
         value: AZP_TOKEN
-      {{- if not .Values.image.isWindows }}
-      - name: AGENT_ALLOW_RUNASROOT
-        value: "1"
-      {{- end }}
       - name: AZP_AGENT_NAME
         {{- toYaml .Args.azpAgentName | nindent 8 }}
       - name: AZP_URL
