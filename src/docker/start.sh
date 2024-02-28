@@ -88,6 +88,7 @@ cd $(dirname "$0")
 bash config.sh \
   --acceptTeeEula \
   --agent "$AZP_AGENT_NAME" \
+  --replcace \
   --auth PAT \
   --pool "$AZP_POOL" \
   --replace \
