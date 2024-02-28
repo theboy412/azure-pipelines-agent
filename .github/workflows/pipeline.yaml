@@ -17,7 +17,7 @@ on:
       - main
 
 env:
-  CONTAINER_NAME: ${{ github.repository }}
+  CONTAINER_NAME: azure-agent
   CONTAINER_REGISTRY_GHCR: ghcr.io
   CONTAINER_REGISTRY_DOCKER_HUB: interopscontainer.azurecr.io
   # https://github.com/sigstore/cosign/releases
@@ -117,136 +117,6 @@ jobs:
           head: HEAD
           path: .
 
-  build-helm:
-    name: Build Helm chart
-    needs:
-      - init
-      - sast-creds
-      - sast-semgrep
-      - test
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.1
-
-      - name: Setup Helm
-        uses: azure/setup-helm@v3.5
-        with:
-          version: v${{ env.HELM_VERSION }}
-
-      # Required for running "npx" CLI
-      - name: Setup Node
-        uses: actions/setup-node@v4.0.1
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup Cosign
-        uses: sigstore/cosign-installer@v3.3.0
-        with:
-          cosign-release: v${{ env.COSIGN_VERSION }}
-
-      - name: Prepare GPG key
-        run: |
-          echo "${{ secrets.GPG_KEYRING }}" | gpg --dearmor > keyring.gpg
-
-      - name: Package Helm chart
-        run: |
-          cp README.md src/helm/azure-pipelines-agent/
-
-          helm package \
-            --app-version ${{ env.AZP_AGENT_VERSION }} \
-            --destination .cr-release-packages \
-            --key 'Clémence Lesné' \
-            --keyring keyring.gpg \
-            --sign \
-            --version ${{ needs.init.outputs.VERSION }} \
-            src/helm/azure-pipelines-agent
-
-      - name: Sign Helm chart
-        env:
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-        run: |
-          cosign sign-blob \
-            --bundle .cr-release-packages/azure-pipelines-agent-${{ needs.init.outputs.VERSION }}.tgz.bundle \
-            --key="env://COSIGN_PRIVATE_KEY" \
-            --yes \
-            .cr-release-packages/azure-pipelines-agent-${{ needs.init.outputs.VERSION }}.tgz
-
-      - name: Cache Helm chart
-        uses: actions/upload-artifact@v4.0.0
-        with:
-          name: helm-chart
-          path: .cr-release-packages
-
-      - name: Render Helm chart locally
-        run: |
-          helm template \
-            --output-dir .helm-template \
-            --values test/helm/azure-pipelines-agent/values.yaml \
-            .cr-release-packages/azure-pipelines-agent-${{ needs.init.outputs.VERSION }}.tgz
-
-      - name: Run SAST Snyk for Helm
-        # Snyk can be used to break the build when it detects security issues. In this case we want to upload the issues to GitHub Security
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-          npx --yes snyk@${{ env.SNYK_VERSION }} iac test \
-            --sarif-file-output=snyk.sarif \
-            --severity-threshold=medium \
-            .helm-template
-
-      # Fix issue "Error: Code Scanning could not process the submitted SARIF file: rejecting SARIF, as there are more runs than allowed (XX > 20)"
-      # See: https://github.com/github/codeql-action/issues/220
-      - name: Merge SARIF files
-        run: |
-          npx --yes @microsoft/sarif-multitool@${{ env.SARIF_MULTITOOL_VERSION }} merge \
-            --automation-id ${{ github.run_id }} \
-            --merge-empty-logs \
-            --merge-runs \
-            --output-file merged.sarif \
-            snyk.sarif
-
-      - name: Upload results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3.22.12
-        with:
-          sarif_file: merged.sarif
-
-  deploy-helm:
-    name: Deploy Helm chart
-    needs:
-      - build-publish-linux
-    # Only deploy on non-scheduled main branch, as there is only one Helm repo and we cannot override an existing version
-    if: (github.event_name != 'schedule') && (github.ref == 'refs/heads/main')
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.1
-        with:
-          # Chart Releaser needs to have local access to "gh-pages" plus current branch
-          fetch-depth: 0
-
-      - name: Configure Git
-        run: |
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
-
-      - name: Download Helm chart
-        uses: actions/download-artifact@v4.1.0
-        with:
-          name: helm-chart
-          path: .cr-release-packages
-
-      - name: Archive Helm chart
-        uses: helm/chart-releaser-action@v1.5.0
-        with:
-          charts_dir: src/helm
-          skip_packaging: true
-        env:
-          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CR_SKIP_EXISTING: true # Avoid overriding existing files, compat with the Hugo static site
-
   test:
     name: Test
     runs-on: ubuntu-22.04
@@ -340,7 +210,6 @@ jobs:
         uses: docker/metadata-action@v5.4.0
         with:
           images: |
-            ${{ env.CONTAINER_REGISTRY_GHCR }}/${{ env.CONTAINER_NAME }}
             ${{ env.CONTAINER_REGISTRY_DOCKER_HUB }}/${{ env.CONTAINER_NAME }}
           flavor: |
             prefix=${{ matrix.os }}-
@@ -394,7 +263,7 @@ jobs:
           provenance: true
           outputs: type=registry,oci-mediatypes=true,compression=estargz,compression-level=9,force-compression=true
           sbom: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: latest
 
       - name: Sign containers
         env:
@@ -493,114 +362,7 @@ jobs:
       - name: Push to registry
         run: |
           oras push \
-            ${{ env.CONTAINER_REGISTRY_GHCR }}/${{ env.CONTAINER_NAME }}:artifacthub.io \
-            artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml \
-            --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml
-
-          oras push \
             ${{ env.CONTAINER_REGISTRY_DOCKER_HUB }}/${{ env.CONTAINER_NAME }}:artifacthub.io \
             artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml \
             --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml
 
-  update-docker-hub-description:
-    name: Update Docker Hub description
-    needs:
-      - build-publish-linux
-    # Only deploy on non-scheduled main branch, as there is only one Helm repo and we cannot override an existing version
-    if: (github.event_name != 'schedule') && (github.ref == 'refs/heads/main')
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.1
-
-      - name: Push README to Docker Hub
-        uses: peter-evans/dockerhub-description@v3.4.2
-        with:
-          enable-url-completion: true
-          password: ${{ secrets.DOCKER_HUB_PAT }}
-          repository: ${{ env.CONTAINER_NAME }}
-          short-description: ${{ github.event.repository.description }}
-          username: interopscontainer
-
-  build-hugo:
-    name: Build Hugo site
-    runs-on: ubuntu-22.04
-    needs:
-      - sast-creds
-      - sast-semgrep
-      - test
-    steps:
-      - name: Setup Hugo CLI
-        run: |
-          wget -O ${{ runner.temp }}/hugo.deb https://github.com/gohugoio/hugo/releases/download/v${{ env.HUGO_VERSION }}/hugo_extended_${{ env.HUGO_VERSION }}_linux-amd64.deb
-          sudo dpkg -i ${{ runner.temp }}/hugo.deb
-
-      - name: Setup Dart Sass
-        run: sudo snap install dart-sass
-
-      - name: Checkout
-        uses: actions/checkout@v4.1.1
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Setup Pages
-        id: pages
-        uses: actions/configure-pages@v4.0.0
-
-      - name: Build with Hugo
-        working-directory: docs
-        env:
-          # For maximum backward compatibility with Hugo modules
-          HUGO_ENVIRONMENT: production
-          HUGO_ENV: production
-        run: |
-          hugo \
-            --gc \
-            --minify \
-            --baseURL "${{ steps.pages.outputs.base_url }}/"
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4.0.0
-        with:
-          name: hugo
-          path: docs/public
-
-  deploy-hugo:
-    name: Deploy Hugo site
-    needs:
-      - build-hugo
-      - init
-    # Only deploy on non-scheduled main branch, as there is only one Helm repo and we cannot override an existing version
-    if: (github.event_name != 'schedule') && (github.ref == 'refs/heads/main')
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Pull from gh-pages
-        uses: actions/checkout@v4.1.1
-        with:
-          ref: gh-pages
-
-      - name: Clean previous Hugo build
-        run: |
-          # Clean all except Helm index
-          find . -type f -not -name "index.yaml" -not -path "*/.git/*" -delete
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v4.1.0
-        with:
-          name: hugo
-
-      - name: Commit and push
-        run: |
-          # Configure git
-          git config --global user.name "${{ github.actor }}"
-          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-
-          # Commit and push
-          if [[ -z "$(git status --porcelain)" ]]; then
-            echo "Nothing to commit"
-          else
-            git add .
-            git commit -m "Deploy Hugo site v${{ needs.init.outputs.VERSION }}"
-            git push origin gh-pages
-          fi
