@@ -259,7 +259,7 @@ jobs:
           provenance: true
           outputs: type=registry,oci-mediatypes=true,compression=estargz,compression-level=9,force-compression=true
           sbom: true
-          tags: latest
+          tags: ${{ steps.meta.outputs.tags }}
 
       - name: Sign containers
         env:
