@@ -19,7 +19,7 @@ on:
 env:
   CONTAINER_NAME: ${{ github.repository }}
   CONTAINER_REGISTRY_GHCR: ghcr.io
-  CONTAINER_REGISTRY_DOCKER_HUB: docker.io
+  CONTAINER_REGISTRY_DOCKER_HUB: interopscontainer.azurecr.io
   # https://github.com/sigstore/cosign/releases
   COSIGN_VERSION: 2.2.2
   # https://npmjs.com/package/@microsoft/sarif-multitool?activeTab=versions
