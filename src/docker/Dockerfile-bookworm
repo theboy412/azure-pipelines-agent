@@ -75,6 +75,9 @@ FROM base as rootlesskit
 
 # Helm install
 RUN curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 && chmod 700 get_helm.sh && bash get_helm.sh
+# Install kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" -o /usr/bin/kubectl
+RUN chmod +x /usr/bin/kubectl
 
 # Install Go, then verify installation
 ARG GO_VERSION
