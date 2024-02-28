@@ -284,16 +284,6 @@ jobs:
         include:
           - os: bookworm
             arch: linux/amd64,linux/arm64
-          - os: bullseye
-            arch: linux/amd64,linux/arm64
-          - os: focal
-            arch: linux/amd64,linux/arm64
-          - os: jammy
-            arch: linux/amd64,linux/arm64
-          - os: ubi8
-            arch: linux/amd64,linux/arm64
-          - os: ubi9
-            arch: linux/amd64,linux/arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.1

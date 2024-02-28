@@ -54,7 +54,6 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked --mount=target=/
         wget \
         zip \
         zsh \
-        helm \
         zstd \
     && find / -depth -type d -name __pycache__ -exec rm -rf {} \; 2> /dev/null
 
@@ -73,6 +72,9 @@ RUN python3 -m pip \
     && find / -depth -type d -name __pycache__ -exec rm -rf {} \; 2> /dev/null
 
 FROM base as rootlesskit
+
+# Helm install
+RUN curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 && chmod 700 get_helm.sh && bash get_helm.sh
 
 # Install Go, then verify installation
 ARG GO_VERSION
