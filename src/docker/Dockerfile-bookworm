@@ -54,6 +54,7 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked --mount=target=/
         wget \
         zip \
         zsh \
+        helm \
         zstd \
     && find / -depth -type d -name __pycache__ -exec rm -rf {} \; 2> /dev/null
 
