@@ -73,12 +73,6 @@ RUN python3 -m pip \
 
 FROM base as rootlesskit
 
-# Helm install
-RUN curl -fsSL --retry 8 -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 && chmod 700 get_helm.sh && bash get_helm.sh
-# Install kubectl
-RUN curl -fsSL --retry 8 -o /usr/bin/kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" 
-RUN chmod +x /usr/bin/kubectl
-
 # Install Go, then verify installation
 ARG GO_VERSION
 ENV GO_VERSION ${GO_VERSION}
@@ -207,6 +201,12 @@ USER 0:0
 ENV XDG_RUNTIME_DIR=/run/user/0
 ENV TMPDIR=${HOME}/.local/tmp
 ENV BUILDKIT_HOST=unix:///run/user/0/buildkit/buildkitd.sock
+
+# Helm install
+RUN curl -fsSL --retry 8 -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 && chmod 700 get_helm.sh && bash get_helm.sh
+# Install kubectl
+RUN curl -fsSL --retry 8 -o /usr/bin/kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" 
+RUN chmod +x /usr/bin/kubectl
 
 # Install Azure Pipelines Agent startup script
 WORKDIR ${AZP_HOME}
