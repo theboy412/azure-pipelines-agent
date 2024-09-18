@@ -1,4 +1,3 @@
-# should trigger
 name: pipeline
 
 on:
